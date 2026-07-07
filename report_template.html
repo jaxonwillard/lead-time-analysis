@@ -104,6 +104,7 @@
   .axisline { stroke: var(--baseline); stroke-width: 1; }
   .axis-title { fill: var(--text-secondary); font-size: 12px; }
   .pt { stroke: var(--surface-1); stroke-width: 2; }
+  .trend { stroke-width: 2; stroke-linecap: round; fill: none; }
   .empty { fill: var(--text-muted); font-size: 13px; }
 
   .tooltip {
@@ -382,6 +383,34 @@ function render() {
     "text-anchor": "middle", class: "axis-title" });
   xt.textContent = "Order date";
   svg.append(xt);
+
+  // per-location trend lines (least-squares fit over the visible points),
+  // clipped to the plot area and drawn under the dots
+  const clip = svgEl("clipPath", { id: "plotclip" });
+  clip.append(svgEl("rect", { x: M.left, y: M.top,
+    width: W - M.left - M.right, height: H - M.top - M.bottom }));
+  svg.append(clip);
+  const trends = svgEl("g", { "clip-path": "url(#plotclip)" });
+  svg.append(trends);
+  for (const i of state.active) {
+    const sub = pts.filter(p => p.b === i);
+    const t0 = Math.min(...sub.map(p => p.t)), t1 = Math.max(...sub.map(p => p.t));
+    if (sub.length < 3 || t1 - t0 < MS_WK) continue;
+    const n = sub.length;
+    const mx = sub.reduce((s, p) => s + p.t, 0) / n;
+    const my = sub.reduce((s, p) => s + p[state.metric], 0) / n;
+    let sxy = 0, sxx = 0;
+    for (const p of sub) {
+      sxy += (p.t - mx) * (p[state.metric] - my);
+      sxx += (p.t - mx) ** 2;
+    }
+    const slope = sxy / sxx;
+    trends.append(svgEl("line", {
+      x1: X(t0), y1: Y(my + slope * (t0 - mx)),
+      x2: X(t1), y2: Y(my + slope * (t1 - mx)),
+      class: "trend", stroke: `var(--series-${i})`,
+    }));
+  }
 
   // dots
   for (const p of pts) {
