@@ -7,8 +7,9 @@ Actual to LOC) are comma-separated strings mirrored from the linked Corp
 Containers board — one date per container, so a job may have several.
 
 Output: one row per job with order date, location, and lead times in weeks
-  weeks_to_port  = first ETA Port date   - Order Date
+  weeks_to_port  = last ETA Port date    - Order Date
   weeks_to_loc   = last Actual to LOC    - Order Date
+(ETA Port is the only port date available; there is no actual-to-port date.)
 Rows that fail validation are written to a separate rejects file with a
 reason, so nothing disappears silently.
 """
@@ -26,9 +27,11 @@ DEFAULT_GROUPS = ("Ordered", "Archived Shipped Complete")
 
 MULTI_DATE_COLS = ["ETA Departure", "ETA Port", "ETA Load", "Actual to LOC"]
 
-# A lead time longer than this is treated as bad data (typically containers
-# from an earlier job linked onto a reorder item, or year typos).
-DEFAULT_MAX_WEEKS = 52
+# Plausible bounds for order -> location lead time. Anything outside is bad
+# data (typically containers from an earlier job linked onto a reorder item,
+# or year typos).
+DEFAULT_MIN_WEEKS = 8
+DEFAULT_MAX_WEEKS = 24
 
 
 def parse_export(path: str) -> pd.DataFrame:
@@ -77,6 +80,7 @@ def parse_date_list(value) -> list[pd.Timestamp]:
 def normalize(
     items: pd.DataFrame,
     groups: tuple[str, ...] = DEFAULT_GROUPS,
+    min_weeks: float = DEFAULT_MIN_WEEKS,
     max_weeks: float = DEFAULT_MAX_WEEKS,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Return (clean, rejects). Rejects carry a `reject_reason` column."""
@@ -92,27 +96,25 @@ def normalize(
     for col in MULTI_DATE_COLS:
         out[col.lower().replace(" ", "_")] = df[col].map(parse_date_list)
 
-    # Container dates earlier than the order date belong to a different
-    # (earlier) job linked onto this item — common on reorders. Drop the
-    # individual dates, not the job.
-    def valid_dates(row, col):
-        return [d for d in row[col] if pd.isna(row["order_date"]) or d >= row["order_date"]]
-
-    port = out.apply(lambda r: valid_dates(r, "eta_port"), axis=1)
-    loc = out.apply(lambda r: valid_dates(r, "actual_to_loc"), axis=1)
     out["n_containers"] = out["eta_port"].str.len().clip(lower=1)
-    out["first_port_date"] = port.map(lambda ds: min(ds) if ds else pd.NaT)
-    out["last_loc_date"] = loc.map(lambda ds: max(ds) if ds else pd.NaT)
+    out["last_port_date"] = out["eta_port"].map(lambda ds: max(ds) if ds else pd.NaT)
+    out["last_loc_date"] = out["actual_to_loc"].map(lambda ds: max(ds) if ds else pd.NaT)
 
-    out["weeks_to_port"] = (out["first_port_date"] - out["order_date"]).dt.days / 7
+    out["weeks_to_port"] = (out["last_port_date"] - out["order_date"]).dt.days / 7
     out["weeks_to_loc"] = (out["last_loc_date"] - out["order_date"]).dt.days / 7
 
     reasons = pd.Series("", index=out.index)
     reasons[out["order_date"].isna()] = "missing order date"
-    no_dates = out["order_date"].notna() & out["first_port_date"].isna() & out["last_loc_date"].isna()
-    reasons[no_dates] = "no valid container dates on/after order date"
-    too_long = (out["weeks_to_port"] > max_weeks) | (out["weeks_to_loc"] > max_weeks)
-    reasons[too_long & reasons.eq("")] = f"lead time exceeds {max_weeks} weeks"
+    no_dates = out["order_date"].notna() & out["last_port_date"].isna() & out["last_loc_date"].isna()
+    reasons[no_dates] = "no container dates"
+    out_of_bounds = out["weeks_to_loc"].notna() & (
+        (out["weeks_to_loc"] < min_weeks) | (out["weeks_to_loc"] > max_weeks)
+    )
+    reasons[out_of_bounds & reasons.eq("")] = (
+        f"location lead time outside {min_weeks}-{max_weeks} weeks"
+    )
+    neg_port = out["weeks_to_port"].notna() & (out["weeks_to_port"] < 0)
+    reasons[neg_port & reasons.eq("")] = "port date before order date"
 
     rejects = out[reasons.ne("")].copy()
     rejects["reject_reason"] = reasons[reasons.ne("")]
@@ -125,12 +127,14 @@ def main(argv=None):
     ap.add_argument("excel_file", help="Monday.com Corp Sales export (.xlsx)")
     ap.add_argument("-o", "--output", default="normalized.csv")
     ap.add_argument("--rejects", default="rejects.csv")
+    ap.add_argument("--min-weeks", type=float, default=DEFAULT_MIN_WEEKS,
+                    help=f"reject location lead times under this (default {DEFAULT_MIN_WEEKS})")
     ap.add_argument("--max-weeks", type=float, default=DEFAULT_MAX_WEEKS,
-                    help=f"reject lead times longer than this (default {DEFAULT_MAX_WEEKS})")
+                    help=f"reject location lead times over this (default {DEFAULT_MAX_WEEKS})")
     args = ap.parse_args(argv)
 
     items = parse_export(args.excel_file)
-    clean, rejects = normalize(items, max_weeks=args.max_weeks)
+    clean, rejects = normalize(items, min_weeks=args.min_weeks, max_weeks=args.max_weeks)
 
     list_cols = [c.lower().replace(" ", "_") for c in MULTI_DATE_COLS]
     for frame in (clean, rejects):
