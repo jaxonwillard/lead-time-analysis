@@ -335,18 +335,20 @@ function render() {
   const x0 = state.from ?? Math.min(...pts.map(p => p.t));
   const x1 = state.to ?? Math.max(...pts.map(p => p.t));
   const xPad = Math.max((x1 - x0) * 0.015, 12 * 3600 * 1000);
-  const yMax = Math.max(...pts.map(p => p[state.metric]));
-  const yStep = niceStep(yMax || 1, 6);
-  const yTop = Math.max(yStep, Math.ceil(yMax / yStep) * yStep);
+  const vs = pts.map(p => p[state.metric]);
+  const yMax = Math.max(...vs), yMin = Math.min(...vs);
+  const yStep = niceStep((yMax - yMin) || 1, 6);
+  const yBot = Math.floor(yMin / yStep) * yStep;
+  const yTop = Math.max(yBot + yStep, Math.ceil(yMax / yStep) * yStep);
   const X = t => M.left + (t - (x0 - xPad)) / ((x1 + xPad) - (x0 - xPad)) * (W - M.left - M.right);
-  const Y = v => H - M.bottom - v / yTop * (H - M.top - M.bottom);
+  const Y = v => H - M.bottom - (v - yBot) / (yTop - yBot) * (H - M.top - M.bottom);
 
   // y gridlines + ticks
-  for (let v = 0; v <= yTop; v += yStep) {
+  for (let v = yBot; v <= yTop; v += yStep) {
     const y = Y(v);
     svg.append(svgEl("line",
       { x1: M.left, x2: W - M.right, y1: y, y2: y,
-        class: v === 0 ? "axisline" : "gridline" }));
+        class: v === yBot ? "axisline" : "gridline" }));
     const t = svgEl("text", { x: M.left - 8, y: y + 3.5, "text-anchor": "end" });
     t.textContent = v;
     svg.append(t);
