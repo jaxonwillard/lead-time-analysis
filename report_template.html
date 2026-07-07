@@ -107,10 +107,11 @@
   .empty { fill: var(--text-muted); font-size: 13px; }
 
   .tooltip {
-    position: absolute; pointer-events: none; display: none; z-index: 2;
+    position: absolute; top: 10px; right: 10px;
+    pointer-events: none; display: none; z-index: 2;
     background: var(--surface-1); border: 1px solid var(--border);
     border-radius: 8px; padding: 8px 11px; box-shadow: 0 4px 14px rgba(0,0,0,0.18);
-    font-size: 12px; color: var(--text-secondary); max-width: 280px;
+    font-size: 12px; color: var(--text-secondary); max-width: 300px;
   }
   .tooltip .v { font-size: 16px; font-weight: 600; color: var(--text-primary); }
   .tooltip .v .u { font-size: 12px; font-weight: 400; color: var(--text-secondary); }
@@ -383,9 +384,10 @@ function render() {
   // dots
   for (const p of pts) {
     const x = X(p.t), y = Y(p[state.metric]);
-    svg.append(svgEl("circle", { cx: x, cy: y, r: 4, class: "pt",
-                                 fill: `var(--series-${p.b})` }));
-    placed.push({ x, y, p });
+    const el = svgEl("circle", { cx: x, cy: y, r: 4, class: "pt",
+                                 fill: `var(--series-${p.b})` });
+    svg.append(el);
+    placed.push({ x, y, p, el });
   }
 }
 
@@ -401,8 +403,11 @@ svg.addEventListener("pointermove", ev => {
     if (d < bd) { bd = d; best = q; }
   }
   if (!best) { hideTip(); return; }
-  if (hot && hot !== best) hideTip();
+  if (hot === best) return;
+  if (hot) hot.el.setAttribute("r", 4);
   hot = best;
+  best.el.setAttribute("r", 6);
+  svg.append(best.el);   // raise above neighbors so the highlight is visible
 
   tip.replaceChildren();
   const v = document.createElement("div");
@@ -428,13 +433,13 @@ svg.addEventListener("pointermove", ev => {
   tip.append(v, nm, meta);
 
   tip.style.display = "block";
-  const cw = card.clientWidth,
-        px = best.x / sx + svg.offsetLeft, py = best.y / sx + svg.offsetTop;
-  tip.style.left = Math.min(px + 14, cw - tip.offsetWidth - 8) + "px";
-  tip.style.top = Math.max(py - tip.offsetHeight - 12, 4) + "px";
 });
 svg.addEventListener("pointerleave", hideTip);
-function hideTip() { hot = null; tip.style.display = "none"; }
+function hideTip() {
+  if (hot) hot.el.setAttribute("r", 4);
+  hot = null;
+  tip.style.display = "none";
+}
 
 // ---------- table view ----------
 function renderTable(pts) {
