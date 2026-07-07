@@ -29,8 +29,10 @@ def build_payload(df: pd.DataFrame, source: str) -> dict:
     buckets = top + (["Other"] if bucket.eq("Other").any() else [])
     index = {b: i for i, b in enumerate(buckets)}
 
+    port_date = pd.to_datetime(df["last_port_date"], errors="coerce")
+    loc_date = pd.to_datetime(df["last_loc_date"], errors="coerce")
     points = []
-    for row, b in zip(df.itertuples(index=False), bucket):
+    for row, b, pdt, ldt in zip(df.itertuples(index=False), bucket, port_date, loc_date):
         if pd.isna(row.order_date):
             continue
         points.append({
@@ -39,6 +41,8 @@ def build_payload(df: pd.DataFrame, source: str) -> dict:
             "d": row.order_date.date().isoformat(),
             "p": None if pd.isna(row.weeks_to_port) else round(row.weeks_to_port, 1),
             "c": None if pd.isna(row.weeks_to_loc) else round(row.weeks_to_loc, 1),
+            "pd": None if pd.isna(pdt) else pdt.date().isoformat(),
+            "cd": None if pd.isna(ldt) else ldt.date().isoformat(),
         })
     points.sort(key=lambda p: p["d"])
     return {

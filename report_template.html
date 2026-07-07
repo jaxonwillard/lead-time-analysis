@@ -457,10 +457,12 @@ svg.addEventListener("pointermove", ev => {
   nmText.textContent = best.p.n;
   nm.append(key, nmText);
   const meta = document.createElement("div");
-  const other = state.metric === "p" ? best.p.c : best.p.p;
+  const arrival = state.metric === "p" ? best.p.pd : best.p.cd;
   meta.textContent = `${buckets[best.p.b]} · ordered ${fmtDate(best.p.t)}` +
-    (other != null
-      ? ` · ${fmtWk(other)} wks to ${state.metric === "p" ? "location" : "port"}` : "");
+    (arrival
+      ? ` · ${state.metric === "p" ? "port ETA" : "arrived"} ` +
+        fmtDate(Date.parse(arrival + "T00:00:00"))
+      : "");
   tip.append(v, nm, meta);
 
   tip.style.display = "block";
