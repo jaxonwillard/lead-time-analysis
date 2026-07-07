@@ -1,0 +1,467 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Order Lead Times</title>
+<style>
+  :root {
+    --surface-1: #fcfcfb;
+    --page: #f9f9f7;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #898781;
+    --grid: #e1e0d9;
+    --baseline: #c3c2b7;
+    --border: rgba(11,11,11,0.10);
+    --series-0: #2a78d6; --series-1: #1baf7a; --series-2: #eda100;
+    --series-3: #008300; --series-4: #4a3aa7; --series-5: #e34948;
+    --series-6: #e87ba4; --series-7: #eb6834;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --surface-1: #1a1a19;
+      --page: #0d0d0d;
+      --text-primary: #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted: #898781;
+      --grid: #2c2c2a;
+      --baseline: #383835;
+      --border: rgba(255,255,255,0.10);
+      --series-0: #3987e5; --series-1: #199e70; --series-2: #c98500;
+      --series-3: #008300; --series-4: #9085e9; --series-5: #e66767;
+      --series-6: #d55181; --series-7: #d95926;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    background: var(--page); color: var(--text-primary);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: 24px; max-width: 1100px; margin: 0 auto;
+  }
+  h1 { font-size: 20px; font-weight: 600; }
+  .sub { color: var(--text-muted); font-size: 12px; margin-top: 2px; }
+
+  .filters {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    margin: 18px 0 12px;
+  }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px;
+         background: var(--surface-1); padding: 2px; }
+  .seg button {
+    border: 0; background: transparent; color: var(--text-secondary);
+    font: inherit; font-size: 13px; padding: 5px 12px; border-radius: 6px; cursor: pointer;
+  }
+  .seg button.on { background: var(--text-primary); color: var(--page); font-weight: 600; }
+  .presets { display: inline-flex; gap: 4px; }
+  .presets button, .table-toggle {
+    border: 1px solid var(--border); background: var(--surface-1);
+    color: var(--text-secondary); font: inherit; font-size: 13px;
+    padding: 5px 10px; border-radius: 8px; cursor: pointer;
+  }
+  .presets button.on { color: var(--text-primary); font-weight: 600;
+                       border-color: var(--text-muted); }
+  .presets button:hover, .table-toggle:hover, .seg button:not(.on):hover
+    { color: var(--text-primary); }
+  .range { display: inline-flex; gap: 6px; align-items: center;
+           color: var(--text-muted); font-size: 13px; }
+  .range input {
+    border: 1px solid var(--border); background: var(--surface-1);
+    color: var(--text-primary); font: inherit; font-size: 13px;
+    padding: 4px 6px; border-radius: 8px; color-scheme: light dark;
+  }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 7px;
+    border: 1px solid var(--border); background: var(--surface-1);
+    color: var(--text-secondary); font: inherit; font-size: 13px;
+    padding: 4px 11px; border-radius: 999px; cursor: pointer;
+  }
+  .chip .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .chip .ct { color: var(--text-muted); font-size: 12px; }
+  .chip.off { opacity: 0.45; }
+  .chip.off .dot { background: var(--text-muted) !important; }
+  .chip:hover { color: var(--text-primary); }
+
+  .stats { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tile {
+    background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px 16px; min-width: 130px;
+  }
+  .tile .lbl { color: var(--text-muted); font-size: 12px; }
+  .tile .val { font-size: 24px; font-weight: 600; margin-top: 2px; }
+  .tile .val small { font-size: 13px; font-weight: 400; color: var(--text-secondary); }
+
+  .card {
+    position: relative; background: var(--surface-1);
+    border: 1px solid var(--border); border-radius: 12px; padding: 14px 10px 6px;
+  }
+  svg { display: block; width: 100%; }
+  svg text { fill: var(--text-muted); font: 11px system-ui, sans-serif;
+             font-variant-numeric: tabular-nums; }
+  .gridline { stroke: var(--grid); stroke-width: 1; }
+  .axisline { stroke: var(--baseline); stroke-width: 1; }
+  .axis-title { fill: var(--text-secondary); font-size: 12px; }
+  .pt { stroke: var(--surface-1); stroke-width: 2; }
+  .empty { fill: var(--text-muted); font-size: 13px; }
+
+  .tooltip {
+    position: absolute; pointer-events: none; display: none; z-index: 2;
+    background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 11px; box-shadow: 0 4px 14px rgba(0,0,0,0.18);
+    font-size: 12px; color: var(--text-secondary); max-width: 280px;
+  }
+  .tooltip .v { font-size: 16px; font-weight: 600; color: var(--text-primary); }
+  .tooltip .v .u { font-size: 12px; font-weight: 400; color: var(--text-secondary); }
+  .tooltip .k { display: inline-block; width: 12px; height: 0; margin: 0 6px 3px 0;
+                border-top: 2px solid; border-radius: 1px; }
+  .tooltip .nm { color: var(--text-primary); }
+
+  .tablewrap { margin-top: 14px; display: none; }
+  .tablewrap.show { display: block; }
+  .tablewrap .inner { overflow: auto; max-height: 420px;
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 12px; border-bottom: 1px solid var(--grid); }
+  th { position: sticky; top: 0; background: var(--surface-1);
+       color: var(--text-muted); font-weight: 500; }
+  td.num { font-variant-numeric: tabular-nums; text-align: right; }
+  th.num { text-align: right; }
+</style>
+</head>
+<body>
+<h1>Order lead times</h1>
+<div class="sub" id="subtitle"></div>
+
+<div class="filters">
+  <div class="seg" id="metricSeg" role="group" aria-label="Metric">
+    <button data-m="p">To LA port</button>
+    <button data-m="c" class="on">To location</button>
+  </div>
+  <div class="presets" id="presets" role="group" aria-label="Date range presets">
+    <button data-r="all" class="on">All</button>
+    <button data-r="24">2 yr</button>
+    <button data-r="12">12 mo</button>
+    <button data-r="6">6 mo</button>
+  </div>
+  <div class="range">
+    <label>from <input type="date" id="from"></label>
+    <label>to <input type="date" id="to"></label>
+  </div>
+  <button class="table-toggle" id="tableToggle" aria-expanded="false">Table view</button>
+</div>
+
+<div class="legend" id="legend" role="group" aria-label="Locations"></div>
+
+<div class="stats">
+  <div class="tile"><div class="lbl">Jobs shown</div><div class="val" id="stN">–</div></div>
+  <div class="tile"><div class="lbl">Median lead time</div><div class="val" id="stMed">–</div></div>
+  <div class="tile"><div class="lbl">Range (p5–p95)</div><div class="val" id="stP">–</div></div>
+</div>
+
+<div class="card">
+  <svg id="chart" role="img" aria-label="Scatter plot of lead time in weeks by order date"></svg>
+  <div class="tooltip" id="tip"></div>
+</div>
+
+<div class="tablewrap" id="tablewrap">
+  <div class="inner">
+    <table>
+      <thead><tr><th>Job</th><th>Location</th><th>Order date</th>
+        <th class="num">Weeks to port</th><th class="num">Weeks to location</th></tr></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+"use strict";
+const PAYLOAD = /*__PAYLOAD__*/null;
+
+const MS_WK = 7 * 24 * 3600 * 1000;
+const METRIC_LABEL = { p: "Weeks from order to LA port (last ETA port)",
+                       c: "Weeks from order to location (last actual arrival)" };
+const points = PAYLOAD.points.map(p => ({ ...p, t: Date.parse(p.d + "T00:00:00") }));
+const buckets = PAYLOAD.buckets;
+
+const state = {
+  metric: "c",
+  from: null, to: null,          // ms timestamps or null
+  active: new Set(buckets.map((_, i) => i)),
+};
+
+// ---------- helpers ----------
+const $ = id => document.getElementById(id);
+const fmtWk = v => v.toFixed(1);
+const fmtDate = t => new Date(t).toLocaleDateString(undefined,
+  { year: "numeric", month: "short", day: "numeric" });
+function quantile(sorted, q) {
+  if (!sorted.length) return NaN;
+  const i = (sorted.length - 1) * q, lo = Math.floor(i);
+  return lo + 1 < sorted.length ? sorted[lo] + (sorted[lo + 1] - sorted[lo]) * (i - lo)
+                                : sorted[lo];
+}
+function niceStep(span, target) {
+  const raw = span / target, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  for (const m of [1, 2, 5, 10]) if (m * mag >= raw) return m * mag;
+  return 10 * mag;
+}
+const svgEl = (tag, attrs) => {
+  const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const k in attrs) el.setAttribute(k, attrs[k]);
+  return el;
+};
+
+function visible() {
+  return points.filter(p =>
+    p[state.metric] != null &&
+    state.active.has(p.b) &&
+    (state.from == null || p.t >= state.from) &&
+    (state.to == null || p.t <= state.to));
+}
+
+// ---------- legend ----------
+const legendBox = $("legend");
+buckets.forEach((name, i) => {
+  const btn = document.createElement("button");
+  btn.className = "chip";
+  btn.setAttribute("aria-pressed", "true");
+  const dot = document.createElement("span");
+  dot.className = "dot";
+  dot.style.background = `var(--series-${i})`;
+  const nm = document.createElement("span");
+  nm.textContent = name;
+  const ct = document.createElement("span");
+  ct.className = "ct";
+  ct.textContent = points.filter(p => p.b === i).length;
+  btn.append(dot, nm, ct);
+  btn.addEventListener("click", () => {
+    if (state.active.has(i) && state.active.size === 1) {
+      // re-solo click on the last active chip restores everything
+      buckets.forEach((_, j) => state.active.add(j));
+    } else if (state.active.has(i)) {
+      state.active.delete(i);
+    } else {
+      state.active.add(i);
+    }
+    btn.setAttribute("aria-pressed", String(state.active.has(i)));
+    legendBox.querySelectorAll(".chip").forEach((c, j) =>
+      c.classList.toggle("off", !state.active.has(j)));
+    render();
+  });
+  legendBox.append(btn);
+});
+
+// ---------- filters ----------
+$("metricSeg").querySelectorAll("button").forEach(btn =>
+  btn.addEventListener("click", () => {
+    state.metric = btn.dataset.m;
+    $("metricSeg").querySelectorAll("button").forEach(b =>
+      b.classList.toggle("on", b === btn));
+    render();
+  }));
+
+function setPreset(el) {
+  $("presets").querySelectorAll("button").forEach(b =>
+    b.classList.toggle("on", b === el));
+}
+$("presets").querySelectorAll("button").forEach(btn =>
+  btn.addEventListener("click", () => {
+    const r = btn.dataset.r;
+    if (r === "all") { state.from = state.to = null; }
+    else {
+      const d = new Date();
+      d.setMonth(d.getMonth() - Number(r));
+      state.from = d.getTime(); state.to = null;
+    }
+    $("from").value = state.from ? new Date(state.from).toISOString().slice(0, 10) : "";
+    $("to").value = "";
+    setPreset(btn);
+    render();
+  }));
+["from", "to"].forEach(id => $(id).addEventListener("change", () => {
+  state[id] = $(id).value ? Date.parse($(id).value + "T00:00:00") : null;
+  setPreset(null);
+  render();
+}));
+
+$("tableToggle").addEventListener("click", () => {
+  const wrap = $("tablewrap");
+  wrap.classList.toggle("show");
+  $("tableToggle").setAttribute("aria-expanded", wrap.classList.contains("show"));
+});
+
+// ---------- chart ----------
+const svg = $("chart"), tip = $("tip"), card = svg.parentElement;
+const M = { top: 14, right: 18, bottom: 42, left: 46 };
+let placed = [];   // [{x, y, p}] screen coords of the last render
+
+function render() {
+  const pts = visible();
+  const W = Math.max(card.clientWidth - 20, 320);
+  const H = Math.min(460, Math.max(300, Math.round(W * 0.42)));
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("height", H);
+  svg.replaceChildren();
+  placed = [];
+  tip.style.display = "none";
+
+  // stats
+  const vals = pts.map(p => p[state.metric]).sort((a, b) => a - b);
+  $("stN").textContent = vals.length.toLocaleString();
+  $("stMed").innerHTML = "";
+  $("stP").innerHTML = "";
+  if (vals.length) {
+    $("stMed").append(fmtWk(quantile(vals, 0.5)), Object.assign(
+      document.createElement("small"), { textContent: " wks" }));
+    $("stP").append(`${fmtWk(quantile(vals, 0.05))}–${fmtWk(quantile(vals, 0.95))}`,
+      Object.assign(document.createElement("small"), { textContent: " wks" }));
+  } else {
+    $("stMed").textContent = "–"; $("stP").textContent = "–";
+  }
+
+  renderTable(pts);
+
+  if (!pts.length) {
+    const t = svgEl("text", { x: W / 2, y: H / 2, "text-anchor": "middle", class: "empty" });
+    t.textContent = "No jobs match the current filters";
+    svg.append(t);
+    return;
+  }
+
+  // scales
+  const x0 = state.from ?? Math.min(...pts.map(p => p.t));
+  const x1 = state.to ?? Math.max(...pts.map(p => p.t));
+  const xPad = Math.max((x1 - x0) * 0.015, 12 * 3600 * 1000);
+  const yMax = Math.max(...pts.map(p => p[state.metric]));
+  const yStep = niceStep(yMax || 1, 6);
+  const yTop = Math.max(yStep, Math.ceil(yMax / yStep) * yStep);
+  const X = t => M.left + (t - (x0 - xPad)) / ((x1 + xPad) - (x0 - xPad)) * (W - M.left - M.right);
+  const Y = v => H - M.bottom - v / yTop * (H - M.top - M.bottom);
+
+  // y gridlines + ticks
+  for (let v = 0; v <= yTop; v += yStep) {
+    const y = Y(v);
+    svg.append(svgEl("line",
+      { x1: M.left, x2: W - M.right, y1: y, y2: y,
+        class: v === 0 ? "axisline" : "gridline" }));
+    const t = svgEl("text", { x: M.left - 8, y: y + 3.5, "text-anchor": "end" });
+    t.textContent = v;
+    svg.append(t);
+  }
+
+  // x ticks at month boundaries
+  const months = (x1 - x0) / (30.44 * 24 * 3600 * 1000);
+  const mStep = [1, 2, 3, 6, 12].find(s => months / s <= 9) || 12;
+  const tick = new Date(x0);
+  tick.setDate(1); tick.setHours(0, 0, 0, 0);
+  tick.setMonth(Math.ceil(tick.getMonth() / mStep) * mStep);
+  while (tick.getTime() <= x1) {
+    const x = X(tick.getTime());
+    if (x >= M.left && x <= W - M.right) {
+      svg.append(svgEl("line", { x1: x, x2: x, y1: H - M.bottom, y2: H - M.bottom + 4,
+                                 class: "axisline" }));
+      const t = svgEl("text", { x, y: H - M.bottom + 16, "text-anchor": "middle" });
+      t.textContent = tick.toLocaleDateString(undefined,
+        mStep >= 12 ? { year: "numeric" } : { month: "short", year: "2-digit" });
+      svg.append(t);
+    }
+    tick.setMonth(tick.getMonth() + mStep);
+  }
+
+  // axis titles
+  const yt = svgEl("text", { x: -(M.top + (H - M.top - M.bottom) / 2), y: 12,
+    transform: "rotate(-90)", "text-anchor": "middle", class: "axis-title" });
+  yt.textContent = METRIC_LABEL[state.metric];
+  svg.append(yt);
+  const xt = svgEl("text", { x: M.left + (W - M.left - M.right) / 2, y: H - 6,
+    "text-anchor": "middle", class: "axis-title" });
+  xt.textContent = "Order date";
+  svg.append(xt);
+
+  // dots
+  for (const p of pts) {
+    const x = X(p.t), y = Y(p[state.metric]);
+    svg.append(svgEl("circle", { cx: x, cy: y, r: 4, class: "pt",
+                                 fill: `var(--series-${p.b})` }));
+    placed.push({ x, y, p });
+  }
+}
+
+// ---------- hover: nearest point within 24px ----------
+let hot = null;
+svg.addEventListener("pointermove", ev => {
+  const box = svg.getBoundingClientRect();
+  const sx = svg.viewBox.baseVal.width / box.width;
+  const mx = (ev.clientX - box.left) * sx, my = (ev.clientY - box.top) * sx;
+  let best = null, bd = 24 * 24;
+  for (const q of placed) {
+    const d = (q.x - mx) ** 2 + (q.y - my) ** 2;
+    if (d < bd) { bd = d; best = q; }
+  }
+  if (!best) { hideTip(); return; }
+  if (hot && hot !== best) hideTip();
+  hot = best;
+
+  tip.replaceChildren();
+  const v = document.createElement("div");
+  v.className = "v";
+  v.textContent = fmtWk(best.p[state.metric]) + " ";
+  const u = document.createElement("span");
+  u.className = "u";
+  u.textContent = state.metric === "p" ? "wks to port" : "wks to location";
+  v.append(u);
+  const nm = document.createElement("div");
+  const key = document.createElement("span");
+  key.className = "k";
+  key.style.borderTopColor = `var(--series-${best.p.b})`;
+  const nmText = document.createElement("span");
+  nmText.className = "nm";
+  nmText.textContent = best.p.n;
+  nm.append(key, nmText);
+  const meta = document.createElement("div");
+  const other = state.metric === "p" ? best.p.c : best.p.p;
+  meta.textContent = `${buckets[best.p.b]} · ordered ${fmtDate(best.p.t)}` +
+    (other != null
+      ? ` · ${fmtWk(other)} wks to ${state.metric === "p" ? "location" : "port"}` : "");
+  tip.append(v, nm, meta);
+
+  tip.style.display = "block";
+  const cw = card.clientWidth,
+        px = best.x / sx + svg.offsetLeft, py = best.y / sx + svg.offsetTop;
+  tip.style.left = Math.min(px + 14, cw - tip.offsetWidth - 8) + "px";
+  tip.style.top = Math.max(py - tip.offsetHeight - 12, 4) + "px";
+});
+svg.addEventListener("pointerleave", hideTip);
+function hideTip() { hot = null; tip.style.display = "none"; }
+
+// ---------- table view ----------
+function renderTable(pts) {
+  const tb = $("tbody");
+  tb.replaceChildren();
+  const frag = document.createDocumentFragment();
+  for (const p of pts) {
+    const tr = document.createElement("tr");
+    const cells = [p.n, buckets[p.b], p.d,
+                   p.p == null ? "–" : fmtWk(p.p),
+                   p.c == null ? "–" : fmtWk(p.c)];
+    cells.forEach((c, i) => {
+      const td = document.createElement("td");
+      if (i >= 3) td.className = "num";
+      td.textContent = c;
+      tr.append(td);
+    });
+    frag.append(tr);
+  }
+  tb.append(frag);
+}
+
+// ---------- boot ----------
+$("subtitle").textContent =
+  `${points.length.toLocaleString()} orders from ${PAYLOAD.source} · generated ${PAYLOAD.generated}`;
+new ResizeObserver(() => render()).observe(card);
+render();
+</script>
+</body>
+</html>
