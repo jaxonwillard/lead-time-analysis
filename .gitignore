@@ -2,4 +2,4 @@ __pycache__/
 *.pyc
 normalized.csv
 rejects.csv
-lead_times.html
+Corp_Sales*.xlsx
