@@ -70,6 +70,9 @@
     color: var(--text-primary); font: inherit; font-size: 13px;
     padding: 4px 6px; border-radius: 8px; color-scheme: light dark;
   }
+  .range input#target { width: 64px; }
+  .target-line { stroke-width: 2; stroke-dasharray: 5 4; stroke: var(--text-muted); }
+  .target-label { fill: var(--text-secondary); font-size: 11px; font-weight: 600; }
 
   .legend { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
   .chip {
@@ -152,6 +155,10 @@
     <label>to <input type="date" id="to"></label>
   </div>
   <button class="table-toggle on" id="trendToggle" aria-pressed="true">Trend lines</button>
+  <div class="range">
+    <label>target lead time <input type="number" id="target" min="0" step="0.5"
+      inputmode="decimal" placeholder="wks"></label>
+  </div>
   <button class="table-toggle" id="tableToggle" aria-expanded="false">Table view</button>
 </div>
 
@@ -193,6 +200,7 @@ const state = {
   from: null, to: null,          // ms timestamps or null
   active: new Set(buckets.map((_, i) => i)),
   trend: true,
+  target: null,
 };
 
 // ---------- helpers ----------
@@ -296,6 +304,11 @@ $("trendToggle").addEventListener("click", () => {
   $("trendToggle").setAttribute("aria-pressed", String(state.trend));
   render();
 });
+$("target").addEventListener("input", () => {
+  const v = $("target").value;
+  state.target = v === "" ? null : Number(v);
+  render();
+});
 $("tableToggle").addEventListener("click", () => {
   const wrap = $("tablewrap");
   wrap.classList.toggle("show");
@@ -345,6 +358,7 @@ function render() {
   const x1 = state.to ?? Math.max(...pts.map(p => p.t));
   const xPad = Math.max((x1 - x0) * 0.015, 12 * 3600 * 1000);
   const vs = pts.map(p => p[state.metric]);
+  if (state.target != null) vs.push(state.target);
   const yMax = Math.max(...vs), yMin = Math.min(...vs);
   const yStep = niceStep((yMax - yMin) || 1, 6);
   const yBot = Math.floor(yMin / yStep) * yStep;
@@ -380,6 +394,17 @@ function render() {
       svg.append(t);
     }
     tick.setMonth(tick.getMonth() + mStep);
+  }
+
+  // target lead-time line
+  if (state.target != null && !Number.isNaN(state.target)) {
+    const ty = Y(state.target);
+    svg.append(svgEl("line", { x1: M.left, x2: W - M.right, y1: ty, y2: ty,
+                               class: "target-line" }));
+    const lbl = svgEl("text", { x: W - M.right - 6, y: ty - 5, "text-anchor": "end",
+                                class: "target-label" });
+    lbl.textContent = `Target: ${state.target} wks`;
+    svg.append(lbl);
   }
 
   // axis titles
@@ -506,6 +531,7 @@ function renderTable(pts) {
 // ---------- boot ----------
 $("subtitle").textContent =
   `${points.length.toLocaleString()} orders from ${PAYLOAD.source} · generated ${PAYLOAD.generated}`;
+if ($("target").value !== "") state.target = Number($("target").value);
 new ResizeObserver(() => render()).observe(card);
 render();
 </script>
