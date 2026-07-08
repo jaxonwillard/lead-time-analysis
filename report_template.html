@@ -59,7 +59,7 @@
     color: var(--text-secondary); font: inherit; font-size: 13px;
     padding: 5px 10px; border-radius: 8px; cursor: pointer;
   }
-  .presets button.on { color: var(--text-primary); font-weight: 600;
+  .presets button.on, .table-toggle.on { color: var(--text-primary); font-weight: 600;
                        border-color: var(--text-muted); }
   .presets button:hover, .table-toggle:hover, .seg button:not(.on):hover
     { color: var(--text-primary); }
@@ -151,6 +151,7 @@
     <label>from <input type="date" id="from"></label>
     <label>to <input type="date" id="to"></label>
   </div>
+  <button class="table-toggle on" id="trendToggle" aria-pressed="true">Trend lines</button>
   <button class="table-toggle" id="tableToggle" aria-expanded="false">Table view</button>
 </div>
 
@@ -191,6 +192,7 @@ const state = {
   metric: "c",
   from: null, to: null,          // ms timestamps or null
   active: new Set(buckets.map((_, i) => i)),
+  trend: true,
 };
 
 // ---------- helpers ----------
@@ -288,6 +290,12 @@ $("presets").querySelectorAll("button").forEach(btn =>
   render();
 }));
 
+$("trendToggle").addEventListener("click", () => {
+  state.trend = !state.trend;
+  $("trendToggle").classList.toggle("on", state.trend);
+  $("trendToggle").setAttribute("aria-pressed", String(state.trend));
+  render();
+});
 $("tableToggle").addEventListener("click", () => {
   const wrap = $("tablewrap");
   wrap.classList.toggle("show");
@@ -392,7 +400,7 @@ function render() {
   svg.append(clip);
   const trends = svgEl("g", { "clip-path": "url(#plotclip)" });
   svg.append(trends);
-  for (const i of state.active) {
+  for (const i of (state.trend ? state.active : [])) {
     const sub = pts.filter(p => p.b === i);
     const t0 = Math.min(...sub.map(p => p.t)), t1 = Math.max(...sub.map(p => p.t));
     if (sub.length < 3 || t1 - t0 < MS_WK) continue;
