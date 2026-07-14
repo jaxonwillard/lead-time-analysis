@@ -17,6 +17,7 @@
     --series-0: #2a78d6; --series-1: #1baf7a; --series-2: #eda100;
     --series-3: #008300; --series-4: #4a3aa7; --series-5: #e34948;
     --series-6: #e87ba4; --series-7: #eb6834;
+    --row-hot: rgba(11,11,11,0.05);
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -31,6 +32,7 @@
       --series-0: #3987e5; --series-1: #199e70; --series-2: #c98500;
       --series-3: #008300; --series-4: #9085e9; --series-5: #e66767;
       --series-6: #d55181; --series-7: #d95926;
+      --row-hot: rgba(255,255,255,0.07);
     }
   }
   * { box-sizing: border-box; margin: 0; }
@@ -133,6 +135,7 @@
        color: var(--text-muted); font-weight: 500; }
   td.num { font-variant-numeric: tabular-nums; text-align: right; }
   th.num { text-align: right; }
+  tr.hot-row td { font-weight: 600; background: var(--row-hot); }
 </style>
 </head>
 <body>
@@ -318,7 +321,19 @@ $("tableToggle").addEventListener("click", () => {
 // ---------- chart ----------
 const svg = $("chart"), tip = $("tip"), card = svg.parentElement;
 const M = { top: 14, right: 18, bottom: 42, left: 46 };
-let placed = [];   // [{x, y, p}] screen coords of the last render
+let placed = [];      // [{x, y, p, el, idx}] screen coords of the last render
+let tableRows = [];   // <tr> elements, same order/index as `placed`
+
+function highlightDot(idx, on) {
+  const entry = placed[idx];
+  if (!entry) return;
+  entry.el.setAttribute("r", on ? 6 : 4);
+  if (on) svg.append(entry.el);   // raise above neighbors so the highlight is visible
+}
+function highlightRow(idx, on) {
+  const tr = tableRows[idx];
+  if (tr) tr.classList.toggle("hot-row", on);
+}
 
 function render() {
   const pts = visible();
@@ -446,13 +461,13 @@ function render() {
   }
 
   // dots
-  for (const p of pts) {
+  pts.forEach((p, idx) => {
     const x = X(p.t), y = Y(p[state.metric]);
     const el = svgEl("circle", { cx: x, cy: y, r: 4, class: "pt",
                                  fill: `var(--series-${p.b})` });
     svg.append(el);
-    placed.push({ x, y, p, el });
-  }
+    placed.push({ x, y, p, el, idx });
+  });
 }
 
 // ---------- hover: nearest point within 24px ----------
@@ -468,10 +483,10 @@ svg.addEventListener("pointermove", ev => {
   }
   if (!best) { hideTip(); return; }
   if (hot === best) return;
-  if (hot) hot.el.setAttribute("r", 4);
+  if (hot) { highlightDot(hot.idx, false); highlightRow(hot.idx, false); }
   hot = best;
-  best.el.setAttribute("r", 6);
-  svg.append(best.el);   // raise above neighbors so the highlight is visible
+  highlightDot(best.idx, true);
+  highlightRow(best.idx, true);
 
   tip.replaceChildren();
   const v = document.createElement("div");
@@ -502,7 +517,7 @@ svg.addEventListener("pointermove", ev => {
 });
 svg.addEventListener("pointerleave", hideTip);
 function hideTip() {
-  if (hot) hot.el.setAttribute("r", 4);
+  if (hot) { highlightDot(hot.idx, false); highlightRow(hot.idx, false); }
   hot = null;
   tip.style.display = "none";
 }
@@ -511,8 +526,9 @@ function hideTip() {
 function renderTable(pts) {
   const tb = $("tbody");
   tb.replaceChildren();
+  tableRows = [];
   const frag = document.createDocumentFragment();
-  for (const p of pts) {
+  pts.forEach((p, idx) => {
     const tr = document.createElement("tr");
     const cells = [p.n, buckets[p.b], p.d,
                    p.p == null ? "–" : fmtWk(p.p),
@@ -523,8 +539,11 @@ function renderTable(pts) {
       td.textContent = c;
       tr.append(td);
     });
+    tr.addEventListener("mouseenter", () => highlightDot(idx, true));
+    tr.addEventListener("mouseleave", () => highlightDot(idx, false));
+    tableRows.push(tr);
     frag.append(tr);
-  }
+  });
   tb.append(frag);
 }
 
